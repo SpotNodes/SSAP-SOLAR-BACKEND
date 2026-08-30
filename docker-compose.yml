@@ -1,0 +1,29 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: ssap-solar-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo-init-replica:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    # Advertise localhost:27017 (not the internal "mongo" hostname) as the replica set member
+    # address — the app and the mongo shell both connect from the host via the published port.
+    entrypoint: >
+      mongosh --host mongo:27017 --eval
+      "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]}) }"
+
+volumes:
+  mongo_data:

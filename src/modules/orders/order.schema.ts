@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import { OrderStatus, PaymentStatus } from '../../core/enums.js';
+
+// OrderStatus/PaymentStatus are const objects, not TS `enum`s, so z.nativeEnum doesn't apply —
+// cast the runtime values to a non-empty tuple to satisfy z.enum's generic constraint.
+const orderStatusValues = Object.values(OrderStatus) as [OrderStatus, ...OrderStatus[]];
+export const orderStatusSchema = z.enum(orderStatusValues);
+
+const paymentStatusValues = Object.values(PaymentStatus) as [PaymentStatus, ...PaymentStatus[]];
+export const paymentStatusSchema = z.enum(paymentStatusValues);
 
 export const createOrderSchema = z.object({
   lines: z

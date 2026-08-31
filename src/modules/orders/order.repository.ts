@@ -1,6 +1,7 @@
-import type { ClientSession, HydratedDocument } from 'mongoose';
+import type { ClientSession, FilterQuery, HydratedDocument } from 'mongoose';
 import type { Role } from '../../core/auth/roles.js';
 import { Role as RoleValue } from '../../core/auth/roles.js';
+import { escapeRegExp } from '../../core/db/regex-escape.js';
 import { isDuplicateKeyError } from '../../core/db/mongo-errors.js';
 import { OrderStatus, PaymentStatus } from '../../core/enums.js';
 import { generateOrderId } from './order-id.js';
@@ -56,6 +57,16 @@ export interface UpdateStatusData {
   status: OrderStatus;
   historyEntry: OrderStatusHistoryEntryEntity;
   cancelledAt?: Date;
+}
+
+export interface AdminOrderSearchParams {
+  status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
+  dateFrom?: Date;
+  dateTo?: Date;
+  search?: string;
+  skip: number;
+  limit: number;
 }
 
 // Thrown internally when a concurrent request already claimed the same (userId, idempotencyKey)
@@ -116,6 +127,11 @@ export interface OrderRepository {
     update: UpdateStatusData,
     session?: ClientSession,
   ): Promise<OrderEntity | null>;
+
+  // Admin operations — unscoped by owner.
+  findByIdAdmin(id: string, session?: ClientSession): Promise<OrderEntity | null>;
+  searchAdmin(params: AdminOrderSearchParams): Promise<{ items: OrderEntity[]; total: number }>;
+  updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<OrderEntity | null>;
 }
 
 export class MongoOrderRepository implements OrderRepository {
@@ -198,6 +214,40 @@ export class MongoOrderRepository implements OrderRepository {
       },
       { new: true, session },
     );
+    return doc ? toEntity(doc) : null;
+  }
+
+  async findByIdAdmin(id: string, session?: ClientSession): Promise<OrderEntity | null> {
+    const doc = await OrderModel.findOne({ _id: id }).session(session ?? null);
+    return doc ? toEntity(doc) : null;
+  }
+
+  async searchAdmin(
+    params: AdminOrderSearchParams,
+  ): Promise<{ items: OrderEntity[]; total: number }> {
+    const filter: FilterQuery<OrderSchemaType> = {};
+    if (params.status) filter.status = params.status;
+    if (params.paymentStatus) filter.paymentStatus = params.paymentStatus;
+    if (params.dateFrom || params.dateTo) {
+      filter.placedAt = {};
+      if (params.dateFrom) filter.placedAt.$gte = params.dateFrom;
+      if (params.dateTo) filter.placedAt.$lte = params.dateTo;
+    }
+    if (params.search) {
+      const regex = { $regex: escapeRegExp(params.search), $options: 'i' };
+      filter.$or = [{ _id: regex }, { 'customer.name': regex }, { 'customer.mobile': regex }];
+    }
+
+    const [docs, total] = await Promise.all([
+      OrderModel.find(filter).sort({ placedAt: -1 }).skip(params.skip).limit(params.limit),
+      OrderModel.countDocuments(filter),
+    ]);
+
+    return { items: docs.map(toEntity), total };
+  }
+
+  async updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<OrderEntity | null> {
+    const doc = await OrderModel.findOneAndUpdate({ _id: id }, { paymentStatus }, { new: true });
     return doc ? toEntity(doc) : null;
   }
 }

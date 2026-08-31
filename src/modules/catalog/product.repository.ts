@@ -1,4 +1,5 @@
 import type { ClientSession, FilterQuery, HydratedDocument } from 'mongoose';
+import { escapeRegExp } from '../../core/db/regex-escape.js';
 import { ProductModel, type ProductSchemaType, type ProductSpec } from './product.model.js';
 
 export interface ProductEntity {
@@ -23,6 +24,36 @@ export interface ProductSearchParams {
   limit: number;
 }
 
+export interface AdminProductSearchParams {
+  search?: string;
+  categoryId?: string;
+  isActive?: boolean;
+  skip: number;
+  limit: number;
+}
+
+export interface CreateProductData {
+  id: string;
+  name: string;
+  images: string[];
+  price: number;
+  description: string;
+  specs: ProductSpec[];
+  categoryId: string;
+  inventoryQuantity: number;
+  lowStockThreshold: number;
+}
+
+export interface UpdateProductData {
+  name?: string;
+  images?: string[];
+  price?: number;
+  description?: string;
+  specs?: ProductSpec[];
+  categoryId?: string;
+  isActive?: boolean;
+}
+
 export interface StockLine {
   productId: string;
   quantity: number;
@@ -43,10 +74,18 @@ export interface ProductRepository {
   // caller's surrounding transaction rolls back any earlier decrements in the same call.
   decrementStock(lines: StockLine[], session: ClientSession): Promise<StockAdjustmentResult>;
   restock(lines: StockLine[], session: ClientSession): Promise<void>;
-}
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Admin operations — unscoped by isActive, since admin must be able to see/edit/reactivate
+  // soft-deleted products the customer-facing search deliberately excludes.
+  findByIdAdmin(id: string): Promise<ProductEntity | null>;
+  searchAdmin(params: AdminProductSearchParams): Promise<{ items: ProductEntity[]; total: number }>;
+  create(data: CreateProductData): Promise<ProductEntity>;
+  update(id: string, data: UpdateProductData): Promise<ProductEntity | null>;
+  softDelete(id: string): Promise<ProductEntity | null>;
+  setInventory(
+    id: string,
+    data: { inventoryQuantity?: number; lowStockThreshold?: number },
+  ): Promise<ProductEntity | null>;
 }
 
 function toEntity(doc: HydratedDocument<ProductSchemaType>): ProductEntity {
@@ -115,5 +154,50 @@ export class MongoProductRepository implements ProductRepository {
         { session },
       );
     }
+  }
+
+  async findByIdAdmin(id: string): Promise<ProductEntity | null> {
+    const doc = await ProductModel.findOne({ _id: id });
+    return doc ? toEntity(doc) : null;
+  }
+
+  async searchAdmin(
+    params: AdminProductSearchParams,
+  ): Promise<{ items: ProductEntity[]; total: number }> {
+    const filter: FilterQuery<ProductSchemaType> = {};
+    if (params.categoryId) filter.categoryId = params.categoryId;
+    if (params.isActive !== undefined) filter.isActive = params.isActive;
+    if (params.search) filter.name = { $regex: escapeRegExp(params.search), $options: 'i' };
+
+    const [docs, total] = await Promise.all([
+      ProductModel.find(filter).sort({ _id: 1 }).skip(params.skip).limit(params.limit),
+      ProductModel.countDocuments(filter),
+    ]);
+
+    return { items: docs.map(toEntity), total };
+  }
+
+  async create(data: CreateProductData): Promise<ProductEntity> {
+    const { id, ...rest } = data;
+    const doc = await ProductModel.create({ _id: id, ...rest, isActive: true });
+    return toEntity(doc);
+  }
+
+  async update(id: string, data: UpdateProductData): Promise<ProductEntity | null> {
+    const doc = await ProductModel.findOneAndUpdate({ _id: id }, data, { new: true });
+    return doc ? toEntity(doc) : null;
+  }
+
+  async softDelete(id: string): Promise<ProductEntity | null> {
+    const doc = await ProductModel.findOneAndUpdate({ _id: id }, { isActive: false }, { new: true });
+    return doc ? toEntity(doc) : null;
+  }
+
+  async setInventory(
+    id: string,
+    data: { inventoryQuantity?: number; lowStockThreshold?: number },
+  ): Promise<ProductEntity | null> {
+    const doc = await ProductModel.findOneAndUpdate({ _id: id }, data, { new: true });
+    return doc ? toEntity(doc) : null;
   }
 }

@@ -3,6 +3,9 @@ import { MongoRefreshTokenRepository } from './core/auth/refresh-token.repositor
 import { TokenService } from './core/auth/token.service.js';
 import { MongoAdminRepository } from './modules/admin/admin.repository.js';
 import { AdminAuthService } from './modules/admin/admin-auth.service.js';
+import { AdminCategoryService } from './modules/admin/admin-category.service.js';
+import { AdminOrderService } from './modules/admin/admin-order.service.js';
+import { AdminProductService } from './modules/admin/admin-product.service.js';
 import { AuthService } from './modules/auth/auth.service.js';
 import { MongoCategoryRepository } from './modules/catalog/category.repository.js';
 import { CategoryService } from './modules/catalog/category.service.js';
@@ -52,4 +55,7 @@ export const container = {
   categoryService: new CategoryService(categoryRepository),
   productService: new ProductService(productRepository),
   orderService: new OrderService(orderRepository, productRepository, userRepository, orderEventPublisher),
+  adminOrderService: new AdminOrderService(orderRepository, productRepository, orderEventPublisher),
+  adminProductService: new AdminProductService(productRepository),
+  adminCategoryService: new AdminCategoryService(categoryRepository),
 };

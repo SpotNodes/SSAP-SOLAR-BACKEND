@@ -1,4 +1,4 @@
-import type { FilterQuery, HydratedDocument } from 'mongoose';
+import type { ClientSession, FilterQuery, HydratedDocument } from 'mongoose';
 import { ProductModel, type ProductSchemaType, type ProductSpec } from './product.model.js';
 
 export interface ProductEntity {
@@ -23,9 +23,26 @@ export interface ProductSearchParams {
   limit: number;
 }
 
+export interface StockLine {
+  productId: string;
+  quantity: number;
+}
+
+export interface StockAdjustmentResult {
+  ok: boolean;
+  failedProductId?: string;
+}
+
 export interface ProductRepository {
   search(params: ProductSearchParams): Promise<{ items: ProductEntity[]; total: number }>;
   findById(id: string): Promise<ProductEntity | null>;
+  // Unfiltered by isActive — order placement needs to tell "unknown" apart from "exists but
+  // inactive" (both map to PRODUCT_UNAVAILABLE, but the service decides that, not the repo).
+  findManyByIds(ids: string[], session?: ClientSession): Promise<ProductEntity[]>;
+  // Atomic per line via a $gte guard; stops at the first line that can't be satisfied so the
+  // caller's surrounding transaction rolls back any earlier decrements in the same call.
+  decrementStock(lines: StockLine[], session: ClientSession): Promise<StockAdjustmentResult>;
+  restock(lines: StockLine[], session: ClientSession): Promise<void>;
 }
 
 function escapeRegExp(value: string): string {
@@ -69,5 +86,34 @@ export class MongoProductRepository implements ProductRepository {
   async findById(id: string): Promise<ProductEntity | null> {
     const doc = await ProductModel.findOne({ _id: id, isActive: true });
     return doc ? toEntity(doc) : null;
+  }
+
+  async findManyByIds(ids: string[], session?: ClientSession): Promise<ProductEntity[]> {
+    const docs = await ProductModel.find({ _id: { $in: ids } }).session(session ?? null);
+    return docs.map(toEntity);
+  }
+
+  async decrementStock(lines: StockLine[], session: ClientSession): Promise<StockAdjustmentResult> {
+    for (const line of lines) {
+      const result = await ProductModel.updateOne(
+        { _id: line.productId, inventoryQuantity: { $gte: line.quantity } },
+        { $inc: { inventoryQuantity: -line.quantity } },
+        { session },
+      );
+      if (result.matchedCount === 0) {
+        return { ok: false, failedProductId: line.productId };
+      }
+    }
+    return { ok: true };
+  }
+
+  async restock(lines: StockLine[], session: ClientSession): Promise<void> {
+    for (const line of lines) {
+      await ProductModel.updateOne(
+        { _id: line.productId },
+        { $inc: { inventoryQuantity: line.quantity } },
+        { session },
+      );
+    }
   }
 }

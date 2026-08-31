@@ -10,6 +10,9 @@ import { MongoProductRepository } from './modules/catalog/product.repository.js'
 import { ProductService } from './modules/catalog/product.service.js';
 import { MongoOtpRepository } from './modules/auth/otp.repository.js';
 import { MongoVerificationTokenRepository } from './modules/auth/verification-token.repository.js';
+import { NoopOrderEventPublisher } from './modules/orders/order-events.js';
+import { MongoOrderRepository } from './modules/orders/order.repository.js';
+import { OrderService } from './modules/orders/order.service.js';
 import { MongoUserRepository } from './modules/users/user.repository.js';
 import { UserService } from './modules/users/user.service.js';
 import { DevOtpSender } from './providers/otp/dev-otp-sender.js';
@@ -37,6 +40,9 @@ const adminRepository = new MongoAdminRepository();
 const categoryRepository = new MongoCategoryRepository();
 const productRepository = new MongoProductRepository();
 
+const orderRepository = new MongoOrderRepository();
+const orderEventPublisher = new NoopOrderEventPublisher();
+
 export const container = {
   tokenService,
   userService: new UserService(userRepository),
@@ -45,4 +51,5 @@ export const container = {
   adminRepository,
   categoryService: new CategoryService(categoryRepository),
   productService: new ProductService(productRepository),
+  orderService: new OrderService(orderRepository, productRepository, userRepository, orderEventPublisher),
 };

@@ -29,6 +29,15 @@ npm run dev
 
 Interactive API docs: `http://localhost:4000/docs` (raw spec at `/openapi.json`).
 
+## Documentation
+
+- [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) — every endpoint, error codes, worked-flow
+  examples (OTP, idempotent orders, admin state machine)
+- [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) — prerequisites, setup, and a checklist of what
+  to actually verify (for teammates testing this)
+- [`docs/APP_INTEGRATION.md`](docs/APP_INTEGRATION.md) — for the mobile app team: repository →
+  endpoint mapping, auth/token handling, push registration
+
 ## Scripts
 
 | Script | Purpose |

@@ -7,9 +7,15 @@ import type {
   CreateCategoryData,
   UpdateCategoryData,
 } from '../catalog/category.repository.js';
+import type { CategoryService } from '../catalog/category.service.js';
 
 export class AdminCategoryService {
-  constructor(private readonly categories: CategoryRepository) {}
+  constructor(
+    private readonly categories: CategoryRepository,
+    // Only used to invalidate the customer-facing cache after a mutation — admin reads always
+    // hit the repository directly (findAllAdmin/findByIdAdmin), never this cache.
+    private readonly categoryService: CategoryService,
+  ) {}
 
   async listAll(): Promise<CategoryEntity[]> {
     return this.categories.findAllAdmin();
@@ -23,7 +29,9 @@ export class AdminCategoryService {
 
   async create(data: CreateCategoryData): Promise<CategoryEntity> {
     try {
-      return await this.categories.create(data);
+      const category = await this.categories.create(data);
+      this.categoryService.invalidate();
+      return category;
     } catch (err) {
       if (isDuplicateKeyError(err)) {
         throw new AppError(
@@ -39,12 +47,14 @@ export class AdminCategoryService {
   async update(id: string, data: UpdateCategoryData): Promise<CategoryEntity> {
     const updated = await this.categories.update(id, data);
     if (!updated) throw new AppError(ErrorCode.CATEGORY_NOT_FOUND, 'Category not found.');
+    this.categoryService.invalidate();
     return updated;
   }
 
   async softDelete(id: string): Promise<CategoryEntity> {
     const updated = await this.categories.softDelete(id);
     if (!updated) throw new AppError(ErrorCode.CATEGORY_NOT_FOUND, 'Category not found.');
+    this.categoryService.invalidate();
     return updated;
   }
 }

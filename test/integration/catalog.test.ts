@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
+import { container } from '../../src/container.js';
 import { CategoryModel } from '../../src/modules/catalog/category.model.js';
 import { ProductModel } from '../../src/modules/catalog/product.model.js';
 import { catalogSeedCategories, catalogSeedProducts } from '../../src/seed/catalog-seed-data.js';
@@ -22,6 +23,10 @@ async function seed(): Promise<void> {
   await ProductModel.insertMany(
     catalogSeedProducts.map(({ id, ...data }) => ({ _id: id, ...data, isActive: true })),
   );
+
+  // Categories are read through a TTL cache (Phase 7) — direct Mongoose writes in these tests
+  // don't go through the admin service that invalidates it, so force a cold read each test.
+  container.categoryService.invalidate();
 }
 
 describe('GET /categories', () => {

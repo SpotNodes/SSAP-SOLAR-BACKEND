@@ -46,16 +46,18 @@ const productRepository = new MongoProductRepository();
 const orderRepository = new MongoOrderRepository();
 const orderEventPublisher = new NoopOrderEventPublisher();
 
+const categoryService = new CategoryService(categoryRepository);
+
 export const container = {
   tokenService,
   userService: new UserService(userRepository),
   authService: new AuthService(userRepository, otpRepository, verificationTokenRepository, otpSender, tokenService),
   adminAuthService: new AdminAuthService(adminRepository, tokenService),
   adminRepository,
-  categoryService: new CategoryService(categoryRepository),
+  categoryService,
   productService: new ProductService(productRepository),
   orderService: new OrderService(orderRepository, productRepository, userRepository, orderEventPublisher),
   adminOrderService: new AdminOrderService(orderRepository, productRepository, orderEventPublisher),
   adminProductService: new AdminProductService(productRepository),
-  adminCategoryService: new AdminCategoryService(categoryRepository),
+  adminCategoryService: new AdminCategoryService(categoryRepository, categoryService),
 };

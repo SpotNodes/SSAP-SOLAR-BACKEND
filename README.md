@@ -66,14 +66,15 @@ holds the strict response-shape definitions shared by the OpenAPI doc and the co
 1. Auth & Users — customer OTP flow, admin email/password, JWT refresh rotation.
 2. Catalogue — categories & products, search/filter/sort/paginate.
 3. Orders — server-authoritative pricing, transactional stock, idempotency, state machine.
-4. Notifications — device push tokens, Expo push, admin feed. *(not yet built)*
+4. Notifications — device push tokens, Expo push, admin feed + email.
 5. Enquiries/Leads — website lead capture + admin management. *(not yet built)*
 6. Admin API — order/catalogue/inventory management.
 7. Hardening — OpenAPI docs, contract tests, caching, security pass, Docker, deployment docs.
 
-Order/status/payment events already have hook points (`OrderEventPublisher` in
-`src/modules/orders/order-events.ts`, currently a no-op) — Phase 4 is a drop-in replacement with no
-service-layer changes needed.
+Order/status/payment events fire through `OrderEventPublisher`
+(`src/modules/orders/order-events.ts`) — `NotificationOrderEventPublisher` (Phase 4) is the real
+implementation; fire-and-forget by design (PRD §10: never blocks the request path), errors caught
+and logged internally.
 
 ## Environment variables
 
@@ -92,9 +93,10 @@ Copy `.env.example` to `.env` and fill in real values before deploying. All vari
 | `ADMIN_ORIGIN` | no | `http://localhost:5173` | Comma-separated CORS allow-list (admin dashboard + website — the native app needs no entry) |
 | `ADMIN_BOOTSTRAP_EMAIL` | no | — | If set with the password below, `npm run seed` creates this admin if none exists |
 | `ADMIN_BOOTSTRAP_PASSWORD` | no | — | Min 8 chars |
+| `ADMIN_NOTIFICATION_EMAIL` | no | falls back to `ADMIN_BOOTSTRAP_EMAIL` | Where new-order/cancellation alerts are sent |
 | `OTP_PROVIDER` | no | `dev` | `dev` logs the code instead of sending SMS. Real adapters (MSG91/Twilio) are a config swap away — see `src/providers/otp/` |
-| `PUSH_PROVIDER` | no | `dev` | Reserved for Phase 4 |
-| `EMAIL_PROVIDER` | no | `dev` | Reserved for Phase 4/5 |
+| `PUSH_PROVIDER` | no | `dev` | `expo` works today — Expo's push API is keyless, no account needed. `dev` logs instead |
+| `EMAIL_PROVIDER` | no | `dev` | No real SMTP adapter implemented yet — `dev` logs instead |
 | `STORAGE_PROVIDER` | no | `dev` | Reserved for a future image-upload endpoint — product images accept HTTPS URLs directly today |
 | `RATE_LIMIT_WINDOW_MS` | no | `900000` | Base app-wide limiter window |
 | `RATE_LIMIT_MAX` | no | `300` | Base app-wide limiter cap per window |

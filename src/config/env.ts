@@ -16,6 +16,10 @@ const envSchema = z.object({
   ADMIN_ORIGIN: z.string().default('http://localhost:5173'),
   ADMIN_BOOTSTRAP_EMAIL: z.string().email().optional(),
   ADMIN_BOOTSTRAP_PASSWORD: z.string().min(8).optional(),
+  // Where new-order/cancellation email notifications go — separate from the bootstrap admin's
+  // own login email, since a deployment may want alerts on a distribution list. Falls back to
+  // ADMIN_BOOTSTRAP_EMAIL if unset.
+  ADMIN_NOTIFICATION_EMAIL: z.string().email().optional(),
 
   OTP_PROVIDER: z.enum(['dev', 'msg91', 'twilio']).default('dev'),
   PUSH_PROVIDER: z.enum(['dev', 'expo']).default('dev'),

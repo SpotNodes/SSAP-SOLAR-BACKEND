@@ -3,6 +3,7 @@ import { Role } from '../../core/auth/roles.js';
 import { authGuard } from '../../core/http/auth.js';
 import { rbac } from '../../core/http/rbac.js';
 import { adminCategoryRouter } from './admin-category.routes.js';
+import { adminNotificationRouter } from './admin-notification.routes.js';
 import { adminOrderRouter } from './admin-order.routes.js';
 import { adminProductRouter } from './admin-product.routes.js';
 
@@ -15,3 +16,4 @@ adminRouter.use(authGuard, rbac(Role.ADMIN));
 adminRouter.use('/orders', adminOrderRouter);
 adminRouter.use('/products', adminProductRouter);
 adminRouter.use('/categories', adminCategoryRouter);
+adminRouter.use('/notifications', adminNotificationRouter);

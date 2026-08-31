@@ -4,6 +4,7 @@ import { TokenService } from './core/auth/token.service.js';
 import { MongoAdminRepository } from './modules/admin/admin.repository.js';
 import { AdminAuthService } from './modules/admin/admin-auth.service.js';
 import { AdminCategoryService } from './modules/admin/admin-category.service.js';
+import { AdminNotificationService } from './modules/admin/admin-notification.service.js';
 import { AdminOrderService } from './modules/admin/admin-order.service.js';
 import { AdminProductService } from './modules/admin/admin-product.service.js';
 import { AuthService } from './modules/auth/auth.service.js';
@@ -13,13 +14,21 @@ import { MongoProductRepository } from './modules/catalog/product.repository.js'
 import { ProductService } from './modules/catalog/product.service.js';
 import { MongoOtpRepository } from './modules/auth/otp.repository.js';
 import { MongoVerificationTokenRepository } from './modules/auth/verification-token.repository.js';
-import { NoopOrderEventPublisher } from './modules/orders/order-events.js';
+import { MongoDeviceRepository } from './modules/notifications/device.repository.js';
+import { DeviceService } from './modules/notifications/device.service.js';
+import { MongoNotificationRepository } from './modules/notifications/notification.repository.js';
+import { NotificationOrderEventPublisher } from './modules/notifications/order-notification-publisher.js';
 import { MongoOrderRepository } from './modules/orders/order.repository.js';
 import { OrderService } from './modules/orders/order.service.js';
 import { MongoUserRepository } from './modules/users/user.repository.js';
 import { UserService } from './modules/users/user.service.js';
+import { DevEmailSender } from './providers/email/dev-email-sender.js';
+import type { EmailSender } from './providers/email/email-sender.js';
 import { DevOtpSender } from './providers/otp/dev-otp-sender.js';
 import type { OtpSender } from './providers/otp/otp-sender.js';
+import { DevPushSender } from './providers/push/dev-push-sender.js';
+import { ExpoPushSender } from './providers/push/expo-push-sender.js';
+import type { PushSender } from './providers/push/push-sender.js';
 
 function createOtpSender(): OtpSender {
   switch (env.OTP_PROVIDER) {
@@ -27,6 +36,26 @@ function createOtpSender(): OtpSender {
       return new DevOtpSender();
     default:
       throw new Error(`OTP provider "${env.OTP_PROVIDER}" is not implemented yet.`);
+  }
+}
+
+function createPushSender(): PushSender {
+  switch (env.PUSH_PROVIDER) {
+    case 'dev':
+      return new DevPushSender();
+    case 'expo':
+      return new ExpoPushSender();
+    default:
+      throw new Error(`Push provider "${env.PUSH_PROVIDER}" is not implemented yet.`);
+  }
+}
+
+function createEmailSender(): EmailSender {
+  switch (env.EMAIL_PROVIDER) {
+    case 'dev':
+      return new DevEmailSender();
+    default:
+      throw new Error(`Email provider "${env.EMAIL_PROVIDER}" is not implemented yet.`);
   }
 }
 
@@ -44,7 +73,17 @@ const categoryRepository = new MongoCategoryRepository();
 const productRepository = new MongoProductRepository();
 
 const orderRepository = new MongoOrderRepository();
-const orderEventPublisher = new NoopOrderEventPublisher();
+
+const deviceRepository = new MongoDeviceRepository();
+const notificationRepository = new MongoNotificationRepository();
+const pushSender = createPushSender();
+const emailSender = createEmailSender();
+const orderEventPublisher = new NotificationOrderEventPublisher(
+  deviceRepository,
+  pushSender,
+  notificationRepository,
+  emailSender,
+);
 
 const categoryService = new CategoryService(categoryRepository);
 
@@ -60,4 +99,6 @@ export const container = {
   adminOrderService: new AdminOrderService(orderRepository, productRepository, orderEventPublisher),
   adminProductService: new AdminProductService(productRepository),
   adminCategoryService: new AdminCategoryService(categoryRepository, categoryService),
+  deviceService: new DeviceService(deviceRepository),
+  adminNotificationService: new AdminNotificationService(notificationRepository),
 };

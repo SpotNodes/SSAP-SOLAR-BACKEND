@@ -15,3 +15,9 @@ export const addressSchema = z.string().trim().min(1, 'Address is required.').ma
 export const cityStateSchema = z.string().trim().min(1, 'City/State is required.').max(150);
 
 export const companyNameSchema = z.string().trim().min(1).max(150).optional();
+
+// Query-string booleans arrive as the strings "true"/"false" — z.coerce.boolean() is a footgun
+// here since Boolean("false") is true in JS.
+export const booleanQueryParam = z
+  .preprocess((val) => (typeof val === 'string' ? val === 'true' : val), z.boolean())
+  .optional();

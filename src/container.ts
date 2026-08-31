@@ -4,6 +4,10 @@ import { TokenService } from './core/auth/token.service.js';
 import { MongoAdminRepository } from './modules/admin/admin.repository.js';
 import { AdminAuthService } from './modules/admin/admin-auth.service.js';
 import { AuthService } from './modules/auth/auth.service.js';
+import { MongoCategoryRepository } from './modules/catalog/category.repository.js';
+import { CategoryService } from './modules/catalog/category.service.js';
+import { MongoProductRepository } from './modules/catalog/product.repository.js';
+import { ProductService } from './modules/catalog/product.service.js';
 import { MongoOtpRepository } from './modules/auth/otp.repository.js';
 import { MongoVerificationTokenRepository } from './modules/auth/verification-token.repository.js';
 import { MongoUserRepository } from './modules/users/user.repository.js';
@@ -30,10 +34,15 @@ const otpSender = createOtpSender();
 
 const adminRepository = new MongoAdminRepository();
 
+const categoryRepository = new MongoCategoryRepository();
+const productRepository = new MongoProductRepository();
+
 export const container = {
   tokenService,
   userService: new UserService(userRepository),
   authService: new AuthService(userRepository, otpRepository, verificationTokenRepository, otpSender, tokenService),
   adminAuthService: new AdminAuthService(adminRepository, tokenService),
   adminRepository,
+  categoryService: new CategoryService(categoryRepository),
+  productService: new ProductService(productRepository),
 };

@@ -67,7 +67,7 @@ holds the strict response-shape definitions shared by the OpenAPI doc and the co
 2. Catalogue — categories & products, search/filter/sort/paginate.
 3. Orders — server-authoritative pricing, transactional stock, idempotency, state machine.
 4. Notifications — device push tokens, Expo push, admin feed + email.
-5. Enquiries/Leads — website lead capture + admin management. *(not yet built)*
+5. Enquiries/Leads — website lead capture + admin management.
 6. Admin API — order/catalogue/inventory management.
 7. Hardening — OpenAPI docs, contract tests, caching, security pass, Docker, deployment docs.
 

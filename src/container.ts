@@ -4,6 +4,7 @@ import { TokenService } from './core/auth/token.service.js';
 import { MongoAdminRepository } from './modules/admin/admin.repository.js';
 import { AdminAuthService } from './modules/admin/admin-auth.service.js';
 import { AdminCategoryService } from './modules/admin/admin-category.service.js';
+import { AdminEnquiryService } from './modules/admin/admin-enquiry.service.js';
 import { AdminNotificationService } from './modules/admin/admin-notification.service.js';
 import { AdminOrderService } from './modules/admin/admin-order.service.js';
 import { AdminProductService } from './modules/admin/admin-product.service.js';
@@ -14,6 +15,8 @@ import { MongoProductRepository } from './modules/catalog/product.repository.js'
 import { ProductService } from './modules/catalog/product.service.js';
 import { MongoOtpRepository } from './modules/auth/otp.repository.js';
 import { MongoVerificationTokenRepository } from './modules/auth/verification-token.repository.js';
+import { MongoEnquiryRepository } from './modules/enquiries/enquiry.repository.js';
+import { EnquiryService } from './modules/enquiries/enquiry.service.js';
 import { MongoDeviceRepository } from './modules/notifications/device.repository.js';
 import { DeviceService } from './modules/notifications/device.service.js';
 import { MongoNotificationRepository } from './modules/notifications/notification.repository.js';
@@ -76,6 +79,7 @@ const orderRepository = new MongoOrderRepository();
 
 const deviceRepository = new MongoDeviceRepository();
 const notificationRepository = new MongoNotificationRepository();
+const enquiryRepository = new MongoEnquiryRepository();
 const pushSender = createPushSender();
 const emailSender = createEmailSender();
 const orderEventPublisher = new NotificationOrderEventPublisher(
@@ -101,4 +105,6 @@ export const container = {
   adminCategoryService: new AdminCategoryService(categoryRepository, categoryService),
   deviceService: new DeviceService(deviceRepository),
   adminNotificationService: new AdminNotificationService(notificationRepository),
+  enquiryService: new EnquiryService(enquiryRepository, notificationRepository, emailSender),
+  adminEnquiryService: new AdminEnquiryService(enquiryRepository),
 };

@@ -8,6 +8,8 @@ import { DeviceModel } from '../../src/modules/notifications/device.model.js';
 import { MongoDeviceRepository } from '../../src/modules/notifications/device.repository.js';
 import { NotificationModel } from '../../src/modules/notifications/notification.model.js';
 import { MongoNotificationRepository } from '../../src/modules/notifications/notification.repository.js';
+import { MongoUserNotificationRepository } from '../../src/modules/notifications/user-notification.repository.js';
+import { UserNotificationModel } from '../../src/modules/notifications/user-notification.model.js';
 import { NotificationOrderEventPublisher } from '../../src/modules/notifications/order-notification-publisher.js';
 import type { OrderEntity } from '../../src/modules/orders/order.repository.js';
 import { ProductModel } from '../../src/modules/catalog/product.model.js';
@@ -21,7 +23,10 @@ import type { PushMessage, PushSendResult, PushSender } from '../../src/provider
 // Fire-and-forget by design (PRD §10: never block the request path) — tests give the dispatch a
 // short, generous window to complete. Everything it does (an in-memory-replset write, a logged
 // dev-provider call) is local and fast; there is no real network in dev mode.
-const DISPATCH_SETTLE_MS = 100;
+// Raised from 100ms when the publisher gained a per-user inbox write: each
+// dispatch now does one more round trip before the admin email goes out, and
+// 100ms was close enough to the edge to flake.
+const DISPATCH_SETTLE_MS = 400;
 const settle = () => new Promise((resolve) => setTimeout(resolve, DISPATCH_SETTLE_MS));
 
 function fakeOrder(overrides: Partial<OrderEntity> = {}): OrderEntity {
@@ -52,6 +57,7 @@ describe('order notification dispatch (direct)', () => {
   beforeEach(async () => {
     await DeviceModel.deleteMany({});
     await NotificationModel.deleteMany({});
+    await UserNotificationModel.deleteMany({});
     devPushOutbox.length = 0;
     devEmailOutbox.length = 0;
   });
@@ -64,6 +70,7 @@ describe('order notification dispatch (direct)', () => {
       new DevPushSender(),
       new MongoNotificationRepository(),
       new DevEmailSender(),
+      new MongoUserNotificationRepository(),
     );
 
     publisher.orderPlaced(fakeOrder());
@@ -92,6 +99,7 @@ describe('order notification dispatch (direct)', () => {
       new DevPushSender(),
       new MongoNotificationRepository(),
       new DevEmailSender(),
+      new MongoUserNotificationRepository(),
     );
 
     publisher.orderCancelled(fakeOrder({ status: OrderStatus.Cancelled }));
@@ -110,6 +118,7 @@ describe('order notification dispatch (direct)', () => {
       new DevPushSender(),
       new MongoNotificationRepository(),
       new DevEmailSender(),
+      new MongoUserNotificationRepository(),
     );
 
     publisher.orderStatusChanged(fakeOrder({ status: OrderStatus.Confirmed }));
@@ -122,6 +131,13 @@ describe('order notification dispatch (direct)', () => {
     expect(devPushOutbox[1]!.message.title).toBe('Payment update');
     expect(await NotificationModel.countDocuments({})).toBe(0);
     expect(devEmailOutbox).toHaveLength(0);
+    // Both land in the customer's own inbox, unread.
+    const inbox = await UserNotificationModel.find({ userId: 'user-1' });
+    expect(inbox.map((n) => n.type).sort()).toEqual([
+      'ORDER_PAYMENT_CHANGED',
+      'ORDER_STATUS_CHANGED',
+    ]);
+    expect(inbox.every((n) => n.readAt === null)).toBe(true);
   });
 
   it('skips pushing gracefully when the customer has no registered devices', async () => {
@@ -130,6 +146,7 @@ describe('order notification dispatch (direct)', () => {
       new DevPushSender(),
       new MongoNotificationRepository(),
       new DevEmailSender(),
+      new MongoUserNotificationRepository(),
     );
 
     publisher.orderPlaced(fakeOrder());
@@ -138,6 +155,9 @@ describe('order notification dispatch (direct)', () => {
     expect(devPushOutbox).toHaveLength(0);
     // Admin still gets notified even with no customer devices.
     expect(await NotificationModel.countDocuments({})).toBe(1);
+    // And the customer's inbox row is written regardless — the push is a nudge,
+    // the row is the durable record.
+    expect(await UserNotificationModel.countDocuments({ userId: 'user-1' })).toBe(1);
   });
 
   it('prunes a device Expo reports as permanently invalid', async () => {
@@ -154,6 +174,7 @@ describe('order notification dispatch (direct)', () => {
       failingPushSender,
       new MongoNotificationRepository(),
       new DevEmailSender(),
+      new MongoUserNotificationRepository(),
     );
 
     publisher.orderStatusChanged(fakeOrder({ status: OrderStatus.Shipped }));
@@ -186,6 +207,7 @@ describe('order notification dispatch (end-to-end via HTTP)', () => {
     await ProductModel.deleteMany({});
     await DeviceModel.deleteMany({});
     await NotificationModel.deleteMany({});
+    await UserNotificationModel.deleteMany({});
     devPushOutbox.length = 0;
     devEmailOutbox.length = 0;
   });

@@ -6,12 +6,14 @@ import { CategoryModel } from '../../src/modules/catalog/category.model.js';
 import { ProductModel } from '../../src/modules/catalog/product.model.js';
 import { OrderModel } from '../../src/modules/orders/order.model.js';
 import { UserModel } from '../../src/modules/users/user.model.js';
+import { UserNotificationModel } from '../../src/modules/notifications/user-notification.model.js';
 import { devOtpInbox } from '../../src/providers/otp/dev-otp-sender.js';
 import {
   authSessionSchema,
   publicCategorySchema,
   publicOrderSchema,
   publicProductSchema,
+  publicUserNotificationSchema,
   publicUserSchema,
 } from '../../src/openapi/schemas.js';
 
@@ -129,5 +131,39 @@ describe('API response contracts', () => {
       .get(`/api/v1/orders/${createRes.body.data.id}`)
       .set('Authorization', `Bearer ${accessToken}`);
     expect(() => publicOrderSchema.parse(getRes.body.data)).not.toThrow();
+  });
+});
+
+describe('Notification response contract', () => {
+  it("UserNotification: GET /notifications matches the app's AppNotification type exactly", async () => {
+    const user = await UserModel.create({
+      name: 'Inbox Tester',
+      mobile: '+919876511111',
+      email: 'inbox@example.com',
+      address: '1 Test St',
+      cityState: 'Pune, Maharashtra',
+      role: 'CUSTOMER',
+      mobileVerified: true,
+    });
+    const { accessToken } = await container.tokenService.issueTokenPair(
+      user._id.toString(),
+      'CUSTOMER',
+    );
+    await UserNotificationModel.create({
+      userId: user._id.toString(),
+      type: 'ORDER_STATUS_CHANGED',
+      title: 'Order update',
+      body: 'Your order SSAP-1 is now SHIPPED.',
+      data: { orderId: 'SSAP-1' },
+    });
+
+    const res = await request(app)
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.body.data.length).toBeGreaterThan(0);
+    for (const notification of res.body.data) {
+      expect(() => publicUserNotificationSchema.parse(notification)).not.toThrow();
+    }
   });
 });

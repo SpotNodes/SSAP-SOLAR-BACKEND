@@ -96,6 +96,15 @@ export const productSpecSchema = z.object({ label: z.string(), value: z.string()
 
 export const stockStatusSchema = z.enum(['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK']);
 
+export const productVariantSchema = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    price: z.number().optional(),
+    stockStatus: stockStatusSchema.optional(),
+  })
+  .strict();
+
 export const publicProductSchema = z
   .object({
     id: z.string(),
@@ -104,11 +113,31 @@ export const publicProductSchema = z
     price: z.number(),
     description: z.string(),
     specs: z.array(productSpecSchema),
+    variantLabel: z.string().optional(),
+    variants: z.array(productVariantSchema).optional(),
     categoryId: z.string(),
     stockStatus: stockStatusSchema,
+    /** ISO timestamp — drives the app's "New arrivals" rail. */
+    createdAt: z.string().datetime(),
   })
   .strict()
   .openapi('Product');
+
+// --- Notifications --------------------------------------------------------------------------
+
+export const publicUserNotificationSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    title: z.string(),
+    body: z.string(),
+    data: z.record(z.unknown()).optional(),
+    createdAt: z.string().datetime(),
+    /** null while unread — the app badges on this. */
+    readAt: z.string().datetime().nullable(),
+  })
+  .strict()
+  .openapi('UserNotification');
 
 // --- Orders ---------------------------------------------------------------------------------
 

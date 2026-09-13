@@ -14,6 +14,13 @@ const httpsUrlSchema = z
   .url()
   .refine((url) => url.startsWith('https://'), { message: 'Image URLs must be HTTPS.' });
 
+const variantSchema = z.object({
+  id: slugSchema,
+  label: z.string().trim().min(1).max(60),
+  price: z.number().int().min(0).optional(),
+  stockStatus: z.enum(['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK']).optional(),
+});
+
 const specSchema = z.object({
   label: z.string().trim().min(1).max(100),
   value: z.string().trim().min(1).max(200),
@@ -26,6 +33,14 @@ export const createProductSchema = z.object({
   price: z.number().int().min(0),
   description: z.string().trim().min(1),
   specs: z.array(specSchema).default([]),
+  variantLabel: z.string().trim().min(1).max(60).optional(),
+  variants: z
+    .array(variantSchema)
+    .max(30)
+    .optional()
+    .refine((v) => !v || new Set(v.map((x) => x.id)).size === v.length, {
+      message: 'Duplicate variant id.',
+    }),
   categoryId: z.string().trim().min(1),
   inventoryQuantity: z.number().int().min(0).default(0),
   lowStockThreshold: z.number().int().min(0).default(5),

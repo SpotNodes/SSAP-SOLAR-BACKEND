@@ -132,9 +132,34 @@ export interface OrderRepository {
   findByIdAdmin(id: string, session?: ClientSession): Promise<OrderEntity | null>;
   searchAdmin(params: AdminOrderSearchParams): Promise<{ items: OrderEntity[]; total: number }>;
   updatePaymentStatus(id: string, paymentStatus: PaymentStatus): Promise<OrderEntity | null>;
+
+  /**
+   * Product ids ranked by units actually sold, most sold first. Backs the
+   * catalogue's "Best sellers" — the only honest source for that label.
+   */
+  topSellingProductIds(params: { limit: number; sinceDays: number }): Promise<string[]>;
 }
 
 export class MongoOrderRepository implements OrderRepository {
+  async topSellingProductIds({
+    limit,
+    sinceDays,
+  }: {
+    limit: number;
+    sinceDays: number;
+  }): Promise<string[]> {
+    const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    // Cancelled orders are excluded: goods that came back were never sold.
+    const rows = await OrderModel.aggregate<{ _id: string; units: number }>([
+      { $match: { placedAt: { $gte: since }, status: { $ne: OrderStatus.Cancelled } } },
+      { $unwind: '$lines' },
+      { $group: { _id: '$lines.productId', units: { $sum: '$lines.quantity' } } },
+      { $sort: { units: -1, _id: 1 } },
+      { $limit: limit },
+    ]);
+    return rows.map((row) => row._id);
+  }
+
   async create(data: CreateOrderData, session: ClientSession): Promise<OrderEntity> {
     const now = new Date();
     const historyEntry = { status: OrderStatus.Pending, at: now, byRole: RoleValue.CUSTOMER };

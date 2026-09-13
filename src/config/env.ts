@@ -22,6 +22,13 @@ const envSchema = z.object({
   ADMIN_NOTIFICATION_EMAIL: z.string().email().optional(),
 
   OTP_PROVIDER: z.enum(['dev', 'msg91', 'twilio']).default('dev'),
+  // Dev/demo convenience: pin the OTP to a known code so testers don't have to read the server
+  // log for every login. Only honoured when OTP_PROVIDER=dev AND NODE_ENV is not production —
+  // see `generateOtpCode`. Leave unset for random codes.
+  DEV_FIXED_OTP: z
+    .string()
+    .regex(/^\d{6}$/, 'DEV_FIXED_OTP must be exactly 6 digits')
+    .optional(),
   PUSH_PROVIDER: z.enum(['dev', 'expo']).default('dev'),
   EMAIL_PROVIDER: z.enum(['dev', 'smtp']).default('dev'),
   STORAGE_PROVIDER: z.enum(['dev', 'cloudinary', 's3']).default('dev'),

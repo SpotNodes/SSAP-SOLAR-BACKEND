@@ -1,9 +1,22 @@
 import { Schema } from 'mongoose';
+import { StockStatus } from '../../core/enums.js';
 import { getOrCreateModel } from '../../core/db/model-factory.js';
 
 export interface ProductSpec {
   label: string;
   value: string;
+}
+
+/**
+ * A selectable option of a product (e.g. a 585W panel, or the "Hybrid" inverter build).
+ * `price` and `stockStatus` are optional: when omitted the option inherits the parent
+ * product's. Mirrors the app's `ProductVariant` type so the DTO maps 1:1.
+ */
+export interface ProductVariant {
+  id: string;
+  label: string;
+  price?: number;
+  stockStatus?: StockStatus;
 }
 
 export interface ProductSchemaType {
@@ -13,6 +26,8 @@ export interface ProductSchemaType {
   price: number;
   description: string;
   specs: ProductSpec[];
+  variantLabel?: string;
+  variants?: ProductVariant[];
   categoryId: string;
   inventoryQuantity: number;
   lowStockThreshold: number;
@@ -26,6 +41,16 @@ const productSpecSchema = new Schema<ProductSpec>(
   { _id: false },
 );
 
+const productVariantSchema = new Schema<ProductVariant>(
+  {
+    id: { type: String, required: true },
+    label: { type: String, required: true },
+    price: { type: Number, required: false, min: 0 },
+    stockStatus: { type: String, required: false, enum: Object.values(StockStatus) },
+  },
+  { _id: false },
+);
+
 const productSchema = new Schema<ProductSchemaType>(
   {
     _id: { type: String, required: true },
@@ -34,6 +59,8 @@ const productSchema = new Schema<ProductSchemaType>(
     price: { type: Number, required: true, min: 0 },
     description: { type: String, required: true },
     specs: { type: [productSpecSchema], required: true, default: [] },
+    variantLabel: { type: String, required: false },
+    variants: { type: [productVariantSchema], required: false },
     categoryId: { type: String, required: true },
     inventoryQuantity: { type: Number, required: true, min: 0, default: 0 },
     lowStockThreshold: { type: Number, required: true, min: 0, default: 5 },

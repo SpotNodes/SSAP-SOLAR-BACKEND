@@ -29,6 +29,17 @@ async function seed(): Promise<void> {
   container.categoryService.invalidate();
 }
 
+// Expectations are DERIVED from the seed rather than hard-coded, so editing the catalogue
+// (adding a product, changing a price) can't silently rot these tests.
+const TOTAL = catalogSeedProducts.length;
+const idsWhere = (fn: (p: (typeof catalogSeedProducts)[number]) => boolean) =>
+  catalogSeedProducts.filter(fn).map((p) => p.id);
+const OUT_OF_STOCK = idsWhere((p) => p.inventoryQuantity === 0);
+const LOW_STOCK = idsWhere((p) => p.inventoryQuantity > 0 && p.inventoryQuantity <= p.lowStockThreshold);
+const AVAILABLE = TOTAL - OUT_OF_STOCK.length;
+const SAMPLE = catalogSeedProducts[0];
+const WITH_VARIANTS = catalogSeedProducts.find((p) => (p.variants?.length ?? 0) > 1)!;
+
 describe('GET /categories', () => {
   beforeEach(seed);
 
@@ -58,19 +69,19 @@ describe('GET /categories', () => {
 describe('GET /products', () => {
   beforeEach(seed);
 
-  it('lists all 16 seeded products with a paginated envelope and derived stockStatus', async () => {
-    const res = await request(app).get('/api/v1/products');
+  it('lists every seeded product with a paginated envelope and derived stockStatus', async () => {
+    const res = await request(app).get(`/api/v1/products?pageSize=${TOTAL}`);
     expect(res.status).toBe(200);
-    expect(res.body.meta).toEqual({ page: 1, pageSize: 20, total: 16, totalPages: 1 });
-    expect(res.body.data).toHaveLength(16);
+    expect(res.body.meta).toEqual({ page: 1, pageSize: TOTAL, total: TOTAL, totalPages: 1 });
+    expect(res.body.data).toHaveLength(TOTAL);
 
-    const panel = res.body.data.find((p: { id: string }) => p.id === 'panel-mono-550');
+    const panel = res.body.data.find((p: { id: string }) => p.id === SAMPLE.id);
     expect(panel).toEqual(
       expect.objectContaining({
-        id: 'panel-mono-550',
-        name: 'Monocrystalline 550W Solar Panel',
-        price: 14999,
-        categoryId: 'panels',
+        id: SAMPLE.id,
+        name: SAMPLE.name,
+        price: SAMPLE.price,
+        categoryId: SAMPLE.categoryId,
         stockStatus: 'IN_STOCK',
       }),
     );
@@ -79,37 +90,56 @@ describe('GET /products', () => {
     expect(panel.lowStockThreshold).toBeUndefined();
     expect(panel.isActive).toBeUndefined();
 
-    const outOfStock = res.body.data.find((p: { id: string }) => p.id === 'panel-bifacial-450');
-    expect(outOfStock.stockStatus).toBe('OUT_OF_STOCK');
-    const lowStock = res.body.data.find((p: { id: string }) => p.id === 'inverter-ongrid-10kw');
-    expect(lowStock.stockStatus).toBe('LOW_STOCK');
+    expect(OUT_OF_STOCK.length).toBeGreaterThan(0);
+    for (const id of OUT_OF_STOCK) {
+      expect(res.body.data.find((p: { id: string }) => p.id === id).stockStatus).toBe('OUT_OF_STOCK');
+    }
+    expect(LOW_STOCK.length).toBeGreaterThan(0);
+    for (const id of LOW_STOCK) {
+      expect(res.body.data.find((p: { id: string }) => p.id === id).stockStatus).toBe('LOW_STOCK');
+    }
+  });
+
+  it('exposes variants and variantLabel for multi-option products', async () => {
+    const res = await request(app).get(`/api/v1/products/${WITH_VARIANTS.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.variantLabel).toBe(WITH_VARIANTS.variantLabel);
+    expect(res.body.data.variants).toEqual(WITH_VARIANTS.variants);
+  });
+
+  it('omits variant fields entirely for single-option products', async () => {
+    const single = catalogSeedProducts.find((p) => !p.variants)!;
+    const res = await request(app).get(`/api/v1/products/${single.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).not.toHaveProperty('variantLabel');
+    expect(res.body.data).not.toHaveProperty('variants');
   });
 
   it('filters by categoryId', async () => {
+    const expected = idsWhere((p) => p.categoryId === 'batteries');
     const res = await request(app).get('/api/v1/products?categoryId=batteries');
-    expect(res.body.data).toHaveLength(3);
+    expect(res.body.data).toHaveLength(expected.length);
     expect(res.body.data.every((p: { categoryId: string }) => p.categoryId === 'batteries')).toBe(true);
   });
 
   it('searches case-insensitively by substring on name', async () => {
-    const res = await request(app).get('/api/v1/products?search=lithium');
-    expect(res.body.data).toHaveLength(2);
-    expect(res.body.data.map((p: { id: string }) => p.id).sort()).toEqual([
-      'battery-lithium-100ah',
-      'battery-lithium-200ah',
-    ]);
+    const expected = idsWhere((p) => /tubular/i.test(p.name)).sort();
+    expect(expected.length).toBeGreaterThan(0);
 
-    const upperCase = await request(app).get('/api/v1/products?search=MONO');
-    expect(upperCase.body.data.length).toBeGreaterThan(0);
+    const res = await request(app).get('/api/v1/products?search=tubular');
+    expect(res.body.data.map((p: { id: string }) => p.id).sort()).toEqual(expected);
+
+    const upperCase = await request(app).get('/api/v1/products?search=TUBULAR');
+    expect(upperCase.body.data.map((p: { id: string }) => p.id).sort()).toEqual(expected);
   });
 
   it('inStock=true excludes OUT_OF_STOCK but keeps LOW_STOCK', async () => {
-    const res = await request(app).get('/api/v1/products?inStock=true');
+    const res = await request(app).get(`/api/v1/products?inStock=true&pageSize=${TOTAL}`);
     const ids = res.body.data.map((p: { id: string }) => p.id);
-    expect(ids).not.toContain('panel-bifacial-450'); // OUT_OF_STOCK
-    expect(ids).not.toContain('battery-lithium-200ah'); // OUT_OF_STOCK
-    expect(ids).toContain('inverter-ongrid-10kw'); // LOW_STOCK, still counts as available
-    expect(res.body.meta.total).toBe(14);
+    for (const id of OUT_OF_STOCK) expect(ids).not.toContain(id);
+    // LOW_STOCK still counts as available
+    for (const id of LOW_STOCK) expect(ids).toContain(id);
+    expect(res.body.meta.total).toBe(AVAILABLE);
   });
 
   it('sorts by price', async () => {
@@ -126,14 +156,19 @@ describe('GET /products', () => {
     const res = await request(app).get('/api/v1/products?page=2&pageSize=5');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(5);
-    expect(res.body.meta).toEqual({ page: 2, pageSize: 5, total: 16, totalPages: 4 });
+    expect(res.body.meta).toEqual({
+      page: 2,
+      pageSize: 5,
+      total: TOTAL,
+      totalPages: Math.ceil(TOTAL / 5),
+    });
   });
 
   it('excludes inactive products from listing', async () => {
-    await ProductModel.updateOne({ _id: 'panel-mono-550' }, { isActive: false });
-    const res = await request(app).get('/api/v1/products');
-    expect(res.body.meta.total).toBe(15);
-    expect(res.body.data.some((p: { id: string }) => p.id === 'panel-mono-550')).toBe(false);
+    await ProductModel.updateOne({ _id: SAMPLE.id }, { isActive: false });
+    const res = await request(app).get(`/api/v1/products?pageSize=${TOTAL}`);
+    expect(res.body.meta.total).toBe(TOTAL - 1);
+    expect(res.body.data.some((p: { id: string }) => p.id === SAMPLE.id)).toBe(false);
   });
 });
 
@@ -141,16 +176,11 @@ describe('GET /products/:id', () => {
   beforeEach(seed);
 
   it('returns a single product', async () => {
-    const res = await request(app).get('/api/v1/products/panel-mono-550');
+    const res = await request(app).get(`/api/v1/products/${SAMPLE.id}`);
     expect(res.status).toBe(200);
-    expect(res.body.data.name).toBe('Monocrystalline 550W Solar Panel');
-    expect(res.body.data.specs).toEqual([
-      { label: 'Wattage', value: '550W' },
-      { label: 'Cell Type', value: 'Monocrystalline PERC' },
-      { label: 'Efficiency', value: '21.3%' },
-      { label: 'Dimensions', value: '2280 x 1134 x 35 mm' },
-      { label: 'Warranty', value: '25 years performance' },
-    ]);
+    expect(res.body.data.name).toBe(SAMPLE.name);
+    expect(res.body.data.specs).toEqual(SAMPLE.specs);
+    expect(res.body.data.images).toEqual(SAMPLE.images);
   });
 
   it('returns 404 PRODUCT_NOT_FOUND for an unknown id', async () => {
@@ -160,8 +190,8 @@ describe('GET /products/:id', () => {
   });
 
   it('returns 404 for an inactive product', async () => {
-    await ProductModel.updateOne({ _id: 'panel-mono-550' }, { isActive: false });
-    const res = await request(app).get('/api/v1/products/panel-mono-550');
+    await ProductModel.updateOne({ _id: SAMPLE.id }, { isActive: false });
+    const res = await request(app).get(`/api/v1/products/${SAMPLE.id}`);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('PRODUCT_NOT_FOUND');
   });

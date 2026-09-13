@@ -3,8 +3,16 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDB, disconnectDB } from './core/db/connection.js';
 import { logger } from './core/logger/logger.js';
+import { usesFixedOtp } from './modules/auth/otp-code.js';
 
 async function bootstrap(): Promise<void> {
+  if (usesFixedOtp) {
+    logger.warn(
+      { otp: env.DEV_FIXED_OTP },
+      'DEV_FIXED_OTP is active — every OTP is this same code. Local/demo only; unset it for random codes.',
+    );
+  }
+
   await connectDB(env.MONGODB_URI);
 
   const server = createServer(app);

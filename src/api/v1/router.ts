@@ -5,6 +5,7 @@ import { authRouter } from '../../modules/auth/auth.routes.js';
 import { catalogRouter } from '../../modules/catalog/catalog.routes.js';
 import { enquiriesRouter } from '../../modules/enquiries/enquiry.routes.js';
 import { devicesRouter } from '../../modules/notifications/device.routes.js';
+import { userNotificationsRouter } from '../../modules/notifications/user-notification.routes.js';
 import { ordersRouter } from '../../modules/orders/order.routes.js';
 import { usersRouter } from '../../modules/users/user.routes.js';
 
@@ -16,5 +17,6 @@ v1Router.use('/admin/auth', adminAuthRouter);
 v1Router.use(catalogRouter);
 v1Router.use('/orders', ordersRouter);
 v1Router.use('/devices', devicesRouter);
+v1Router.use('/notifications', userNotificationsRouter);
 v1Router.use('/enquiries', enquiriesRouter);
 v1Router.use('/admin', adminRouter);

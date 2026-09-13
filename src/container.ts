@@ -21,6 +21,8 @@ import { MongoDeviceRepository } from './modules/notifications/device.repository
 import { DeviceService } from './modules/notifications/device.service.js';
 import { MongoNotificationRepository } from './modules/notifications/notification.repository.js';
 import { NotificationOrderEventPublisher } from './modules/notifications/order-notification-publisher.js';
+import { MongoUserNotificationRepository } from './modules/notifications/user-notification.repository.js';
+import { UserNotificationService } from './modules/notifications/user-notification.service.js';
 import { MongoOrderRepository } from './modules/orders/order.repository.js';
 import { OrderService } from './modules/orders/order.service.js';
 import { MongoUserRepository } from './modules/users/user.repository.js';
@@ -76,6 +78,7 @@ const categoryRepository = new MongoCategoryRepository();
 const productRepository = new MongoProductRepository();
 
 const orderRepository = new MongoOrderRepository();
+const userNotificationRepository = new MongoUserNotificationRepository();
 
 const deviceRepository = new MongoDeviceRepository();
 const notificationRepository = new MongoNotificationRepository();
@@ -87,6 +90,7 @@ const orderEventPublisher = new NotificationOrderEventPublisher(
   pushSender,
   notificationRepository,
   emailSender,
+  userNotificationRepository,
 );
 
 const categoryService = new CategoryService(categoryRepository);
@@ -98,7 +102,8 @@ export const container = {
   adminAuthService: new AdminAuthService(adminRepository, tokenService),
   adminRepository,
   categoryService,
-  productService: new ProductService(productRepository),
+  productService: new ProductService(productRepository, orderRepository),
+  userNotificationService: new UserNotificationService(userNotificationRepository),
   orderService: new OrderService(orderRepository, productRepository, userRepository, orderEventPublisher),
   adminOrderService: new AdminOrderService(orderRepository, productRepository, orderEventPublisher),
   adminProductService: new AdminProductService(productRepository),

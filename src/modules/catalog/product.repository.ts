@@ -1,6 +1,11 @@
 import type { ClientSession, FilterQuery, HydratedDocument } from 'mongoose';
 import { escapeRegExp } from '../../core/db/regex-escape.js';
-import { ProductModel, type ProductSchemaType, type ProductSpec } from './product.model.js';
+import {
+  ProductModel,
+  type ProductSchemaType,
+  type ProductSpec,
+  type ProductVariant,
+} from './product.model.js';
 
 export interface ProductEntity {
   id: string;
@@ -9,17 +14,28 @@ export interface ProductEntity {
   price: number;
   description: string;
   specs: ProductSpec[];
+  variantLabel?: string;
+  variants?: ProductVariant[];
   categoryId: string;
   inventoryQuantity: number;
   lowStockThreshold: number;
   isActive: boolean;
+  createdAt: Date;
 }
+
+export type ProductSort = 'priceLowHigh' | 'priceHighLow' | 'newest' | 'bestSelling';
 
 export interface ProductSearchParams {
   search?: string;
   categoryId?: string;
   inStock?: boolean;
-  sort?: 'priceLowHigh' | 'priceHighLow';
+  sort?: ProductSort;
+  /**
+   * Product ids in descending sales rank, supplied by the service for
+   * `sort: 'bestSelling'`. The repo cannot compute this itself — sales live in
+   * the orders collection, which catalog must not reach into directly.
+   */
+  rankedIds?: string[];
   skip: number;
   limit: number;
 }
@@ -39,6 +55,8 @@ export interface CreateProductData {
   price: number;
   description: string;
   specs: ProductSpec[];
+  variantLabel?: string;
+  variants?: ProductVariant[];
   categoryId: string;
   inventoryQuantity: number;
   lowStockThreshold: number;
@@ -96,10 +114,22 @@ function toEntity(doc: HydratedDocument<ProductSchemaType>): ProductEntity {
     price: doc.price,
     description: doc.description,
     specs: doc.specs.map((spec) => ({ label: spec.label, value: spec.value })),
+    ...(doc.variantLabel ? { variantLabel: doc.variantLabel } : {}),
+    ...(doc.variants && doc.variants.length > 0
+      ? {
+          variants: doc.variants.map((v) => ({
+            id: v.id,
+            label: v.label,
+            ...(v.price != null ? { price: v.price } : {}),
+            ...(v.stockStatus ? { stockStatus: v.stockStatus } : {}),
+          })),
+        }
+      : {}),
     categoryId: doc.categoryId,
     inventoryQuantity: doc.inventoryQuantity,
     lowStockThreshold: doc.lowStockThreshold,
     isActive: doc.isActive,
+    createdAt: doc.createdAt,
   };
 }
 
@@ -110,9 +140,27 @@ export class MongoProductRepository implements ProductRepository {
     if (params.search) filter.name = { $regex: escapeRegExp(params.search), $options: 'i' };
     if (params.inStock) filter.inventoryQuantity = { $gt: 0 };
 
+    // Best-selling is ranked by an array the service computed from orders, which
+    // Mongo cannot sort by. Page it in memory: the ranked list is capped at a
+    // few dozen ids, so this never walks the whole catalogue.
+    if (params.sort === 'bestSelling') {
+      const rank = new Map((params.rankedIds ?? []).map((id, index) => [id, index]));
+      const docs = await ProductModel.find(filter).sort({ createdAt: -1 });
+      const sorted = docs.sort((a, b) => {
+        const ra = rank.get(a._id) ?? Number.MAX_SAFE_INTEGER;
+        const rb = rank.get(b._id) ?? Number.MAX_SAFE_INTEGER;
+        return ra - rb;
+      });
+      return {
+        items: sorted.slice(params.skip, params.skip + params.limit).map(toEntity),
+        total: sorted.length,
+      };
+    }
+
     const sort: Record<string, 1 | -1> = {};
     if (params.sort === 'priceLowHigh') sort.price = 1;
     else if (params.sort === 'priceHighLow') sort.price = -1;
+    else if (params.sort === 'newest') sort.createdAt = -1;
 
     const [docs, total] = await Promise.all([
       ProductModel.find(filter).sort(sort).skip(params.skip).limit(params.limit),
